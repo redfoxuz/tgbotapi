@@ -3,7 +3,7 @@ import sqlite3
 import asyncio
 from datetime import datetime
 from flask import Flask, request, jsonify
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -34,8 +34,9 @@ def init_db():
         CREATE TABLE IF NOT EXISTS students (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             region TEXT,
+            gender TEXT,
             age INTEGER,
-            salary REAL,
+            salary INTEGER,
             created_at TEXT
         )
     """)
@@ -51,8 +52,31 @@ init_db()
 bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
 user_data = {}
 
+REGIONS = [
+    "Toshkent", "Toshkent viloyati", "Samarqand", "Buxoro",
+    "Andijon", "Farg‘ona", "Namangan", "Qashqadaryo",
+    "Surxondaryo", "Xorazm", "Jizzax", "Sirdaryo"
+]
+
+GENDERS = ["O‘g‘il bola", "Qiz bola"]
+
+AGES = [str(i) for i in range(15, 51)]
+
+SALARY_VALUES = list(range(5, 21))  # 5 mln dan 20 mln gacha
+SALARIES = [f"{i} mln" for i in SALARY_VALUES]
+
+# =====================
+# BOT COMMANDS
+# =====================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Viloyatingizni yozing:")
+    user_data[update.message.chat_id] = {}
+
+    keyboard = [[KeyboardButton(r)] for r in REGIONS]
+    await update.message.reply_text(
+        "Viloyatingizni tanlang:",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    )
 
 async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_NAME)
@@ -69,22 +93,63 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in user_data:
         user_data[user_id] = {}
 
+    # 1️⃣ REGION
     if "region" not in user_data[user_id]:
+        if text not in REGIONS:
+            return
         user_data[user_id]["region"] = text
-        await update.message.reply_text("Yoshingizni yozing:")
-    elif "age" not in user_data[user_id]:
+
+        keyboard = [[KeyboardButton(g)] for g in GENDERS]
+        await update.message.reply_text(
+            "Jinsingizni tanlang:",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
+        return
+
+    # 2️⃣ GENDER
+    if "gender" not in user_data[user_id]:
+        if text not in GENDERS:
+            return
+        user_data[user_id]["gender"] = text
+
+        keyboard = [AGES[i:i+6] for i in range(0, len(AGES), 6)]
+        await update.message.reply_text(
+            "Yoshingizni tanlang:",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
+        return
+
+    # 3️⃣ AGE
+    if "age" not in user_data[user_id]:
+        if text not in AGES:
+            return
         user_data[user_id]["age"] = int(text)
-        await update.message.reply_text("Oyligingizni yozing:")
-    else:
-        user_data[user_id]["salary"] = float(text)
+
+        keyboard = [SALARIES[i:i+4] for i in range(0, len(SALARIES), 4)]
+        await update.message.reply_text(
+            "Oyligingizni tanlang:",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
+        return
+
+    # 4️⃣ SALARY
+    if "salary" not in user_data[user_id]:
+        if text not in SALARIES:
+            return
+
+        salary_number = int(text.split()[0])  # "7 mln" -> 7
+        salary_int = salary_number * 1_000_000
+
+        user_data[user_id]["salary"] = salary_int
 
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO students (region, age, salary, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO students (region, gender, age, salary, created_at)
+            VALUES (?, ?, ?, ?, ?)
         """, (
             user_data[user_id]["region"],
+            user_data[user_id]["gender"],
             user_data[user_id]["age"],
             user_data[user_id]["salary"],
             datetime.now()
@@ -99,7 +164,7 @@ bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CommandHandler("clear", clear))
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# 🔥 MUHIM — BOT INITIALIZE
+# 🔥 INIT
 asyncio.run(bot_app.initialize())
 
 # =====================
@@ -114,16 +179,17 @@ def home():
 def get_students():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("SELECT region, age, salary, created_at FROM students")
+    cursor.execute("SELECT region, gender, age, salary, created_at FROM students")
     rows = cursor.fetchall()
     conn.close()
 
     return jsonify([
         {
             "region": r[0],
-            "age": r[1],
-            "salary": r[2],
-            "created_at": r[3]
+            "gender": r[1],
+            "age": r[2],
+            "salary": r[3],
+            "created_at": r[4]
         }
         for r in rows
     ])
@@ -138,7 +204,7 @@ def reset_db():
     return jsonify({"status": "database cleared"})
 
 # =====================
-# WEBHOOK ROUTE
+# WEBHOOK
 # =====================
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
@@ -147,10 +213,6 @@ def telegram_webhook():
     update = Update.de_json(data, bot_app.bot)
     asyncio.run(bot_app.process_update(update))
     return "ok"
-
-# =====================
-# SET WEBHOOK ROUTE
-# =====================
 
 @app.route("/setwebhook")
 def set_webhook():
