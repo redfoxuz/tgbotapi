@@ -132,12 +132,20 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Baza tozalandi 🗑")
 
 
-def run_bot():
+# ============================
+# START TELEGRAM BOT AUTOMATICALLY
+# ============================
+
+def start_bot():
     bot = ApplicationBuilder().token(BOT_TOKEN).build()
     bot.add_handler(CommandHandler("start", start))
     bot.add_handler(CommandHandler("clear", clear))
     bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     bot.run_polling()
+
+# Flask yuklanganda bot ham start bo‘ladi
+threading.Thread(target=start_bot).start()
+
 
 
 # ============================
@@ -145,6 +153,6 @@ def run_bot():
 # ============================
 
 if __name__ == "__main__":
-    threading.Thread(target=run_bot).start()
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run()
+
+
