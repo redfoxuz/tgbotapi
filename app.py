@@ -52,6 +52,15 @@ init_db()
 bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
 user_data = {}
 
+# 🔥 STABLE EVENT LOOP
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+loop.run_until_complete(bot_app.initialize())
+
+# =====================
+# DATA LISTS
+# =====================
+
 REGIONS = [
     "Toshkent", "Toshkent viloyati", "Samarqand", "Buxoro",
     "Andijon", "Farg‘ona", "Namangan", "Qashqadaryo",
@@ -62,7 +71,7 @@ GENDERS = ["O‘g‘il bola", "Qiz bola"]
 
 AGES = [str(i) for i in range(15, 51)]
 
-SALARY_VALUES = list(range(5, 21))  # 5 mln dan 20 mln gacha
+SALARY_VALUES = list(range(5, 21))  # 5 mln → 20 mln
 SALARIES = [f"{i} mln" for i in SALARY_VALUES]
 
 # =====================
@@ -137,7 +146,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text not in SALARIES:
             return
 
-        salary_number = int(text.split()[0])  # "7 mln" -> 7
+        salary_number = int(text.split()[0])
         salary_int = salary_number * 1_000_000
 
         user_data[user_id]["salary"] = salary_int
@@ -163,9 +172,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CommandHandler("clear", clear))
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-# 🔥 INIT
-asyncio.run(bot_app.initialize())
 
 # =====================
 # API ROUTES
@@ -211,10 +217,12 @@ def reset_db():
 def telegram_webhook():
     data = request.get_json(force=True)
     update = Update.de_json(data, bot_app.bot)
-    asyncio.run(bot_app.process_update(update))
+    loop.run_until_complete(bot_app.process_update(update))
     return "ok"
 
 @app.route("/setwebhook")
 def set_webhook():
-    asyncio.run(bot_app.bot.set_webhook(f"{BASE_URL}/{BOT_TOKEN}"))
+    loop.run_until_complete(
+        bot_app.bot.set_webhook(f"{BASE_URL}/{BOT_TOKEN}")
+    )
     return "Webhook set successfully ✅"
