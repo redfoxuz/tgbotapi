@@ -1,26 +1,24 @@
 import os
 import sqlite3
-import threading
 from datetime import datetime
 from flask import Flask, request, jsonify
-import requests
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
-# ============================
-# ENV VARIABLES (Renderdan keladi)
-# ============================
+# =====================
+# ENV
+# =====================
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-BASE_URL = os.environ.get("BASE_URL")  # Masalan: https://saddam-api.onrender.com
+BASE_URL = os.environ.get("BASE_URL")  # https://tgbotapi-9h1f.onrender.com
 
 DB_NAME = "data.db"
 
-# ============================
-# FLASK API
-# ============================
-
 app = Flask(__name__)
+
+# =====================
+# DATABASE
+# =====================
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -39,49 +37,31 @@ def init_db():
 
 init_db()
 
-@app.route("/saddam-api/students", methods=["POST"])
-def add_student():
-    data = request.json
+# =====================
+# API ROUTES
+# =====================
 
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT INTO students (region, age, salary, created_at)
-        VALUES (?, ?, ?, ?)
-    """, (
-        data.get("region"),
-        data.get("age"),
-        data.get("salary"),
-        datetime.now()
-    ))
-
-    conn.commit()
-    conn.close()
-
-    return jsonify({"status": "saved in saddam-api"})
-
+@app.route("/")
+def home():
+    return "SADDAM API IS RUNNING 🚀"
 
 @app.route("/saddam-api/students", methods=["GET"])
 def get_students():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-
     cursor.execute("SELECT region, age, salary, created_at FROM students")
     rows = cursor.fetchall()
     conn.close()
 
-    result = []
-    for row in rows:
-        result.append({
-            "region": row[0],
-            "age": row[1],
-            "salary": row[2],
-            "created_at": row[3]
-        })
-
-    return jsonify(result)
-
+    return jsonify([
+        {
+            "region": r[0],
+            "age": r[1],
+            "salary": r[2],
+            "created_at": r[3]
+        }
+        for r in rows
+    ])
 
 @app.route("/saddam-api/reset", methods=["POST"])
 def reset_db():
@@ -90,18 +70,25 @@ def reset_db():
     cursor.execute("DELETE FROM students")
     conn.commit()
     conn.close()
+    return jsonify({"status": "database cleared"})
 
-    return jsonify({"status": "saddam-api database cleared"})
-
-
-# ============================
+# =====================
 # TELEGRAM BOT
-# ============================
+# =====================
 
+bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
 user_data = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Viloyatingizni yozing:")
+
+async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM students")
+    conn.commit()
+    conn.close()
+    await update.message.reply_text("Baza tozalandi 🗑")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.chat_id
@@ -119,40 +106,51 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         user_data[user_id]["salary"] = float(text)
 
-        requests.post(
-            f"{BASE_URL}/saddam-api/students",
-            json=user_data[user_id]
-        )
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO students (region, age, salary, created_at)
+            VALUES (?, ?, ?, ?)
+        """, (
+            user_data[user_id]["region"],
+            user_data[user_id]["age"],
+            user_data[user_id]["salary"],
+            datetime.now()
+        ))
+        conn.commit()
+        conn.close()
 
         await update.message.reply_text("Ma'lumot saqlandi ✅")
         user_data[user_id] = {}
 
-async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    requests.post(f"{BASE_URL}/saddam-api/reset")
-    await update.message.reply_text("Baza tozalandi 🗑")
+bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CommandHandler("clear", clear))
+bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+# =====================
+# WEBHOOK ROUTE
+# =====================
 
-# ============================
-# START TELEGRAM BOT AUTOMATICALLY
-# ============================
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+async def telegram_webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, bot_app.bot)
+    await bot_app.process_update(update)
+    return "ok"
 
-def start_bot():
-    bot = ApplicationBuilder().token(BOT_TOKEN).build()
-    bot.add_handler(CommandHandler("start", start))
-    bot.add_handler(CommandHandler("clear", clear))
-    bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    bot.run_polling()
-
-# Flask yuklanganda bot ham start bo‘ladi
-threading.Thread(target=start_bot).start()
-
-
-
-# ============================
-# RUN BOTH
-# ============================
+# =====================
+# STARTUP
+# =====================
 
 if __name__ == "__main__":
-    app.run()
+    port = int(os.environ.get("PORT", 5000))
 
+    # Webhook o‘rnatish
+    import asyncio
+    async def setup():
+        await bot_app.initialize()
+        await bot_app.bot.set_webhook(f"{BASE_URL}/{BOT_TOKEN}")
 
+    asyncio.run(setup())
+
+    app.run(host="0.0.0.0", port=port)
