@@ -10,7 +10,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Con
 # =====================
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-BASE_URL = os.environ.get("BASE_URL")  # https://tgbotapi-9h1f.onrender.com
+BASE_URL = os.environ.get("BASE_URL")
 
 DB_NAME = "data.db"
 
@@ -73,7 +73,7 @@ def reset_db():
     return jsonify({"status": "database cleared"})
 
 # =====================
-# TELEGRAM BOT
+# TELEGRAM BOT (WEBHOOK)
 # =====================
 
 bot_app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -127,10 +127,6 @@ bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CommandHandler("clear", clear))
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# =====================
-# WEBHOOK ROUTE
-# =====================
-
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 async def telegram_webhook():
     data = request.get_json(force=True)
@@ -139,18 +135,11 @@ async def telegram_webhook():
     return "ok"
 
 # =====================
-# STARTUP
+# WEBHOOK SETTER
 # =====================
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-
-    # Webhook o‘rnatish
-    import asyncio
-    async def setup():
-        await bot_app.initialize()
-        await bot_app.bot.set_webhook(f"{BASE_URL}/{BOT_TOKEN}")
-
-    asyncio.run(setup())
-
-    app.run(host="0.0.0.0", port=port)
+@app.route("/setwebhook")
+async def set_webhook():
+    await bot_app.initialize()
+    await bot_app.bot.set_webhook(f"{BASE_URL}/{BOT_TOKEN}")
+    return "Webhook set successfully ✅"
