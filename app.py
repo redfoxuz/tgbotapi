@@ -79,13 +79,19 @@ SALARIES = [f"{i} mln" for i in SALARY_VALUES]
 # =====================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.message.chat_id] = {}
+    user_id = update.message.chat_id
+    user_data[user_id] = {}
 
     keyboard = [[KeyboardButton(r)] for r in REGIONS]
+
     await update.message.reply_text(
-        "Viloyatingizni tanlang:",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        "Assalomu alaykum!\n\nViloyatingizni tanlang:",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard,
+            resize_keyboard=True
+        )
     )
+
 
 async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect(DB_NAME)
@@ -226,3 +232,4 @@ def set_webhook():
         bot_app.bot.set_webhook(f"{BASE_URL}/{BOT_TOKEN}")
     )
     return "Webhook set successfully ✅"
+
