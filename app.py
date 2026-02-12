@@ -45,41 +45,6 @@ def init_db():
 init_db()
 
 # =====================
-# API ROUTES
-# =====================
-
-@app.route("/")
-def home():
-    return "SADDAM API IS RUNNING 🚀"
-
-@app.route("/saddam-api/students", methods=["GET"])
-def get_students():
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("SELECT region, age, salary, created_at FROM students")
-    rows = cursor.fetchall()
-    conn.close()
-
-    return jsonify([
-        {
-            "region": r[0],
-            "age": r[1],
-            "salary": r[2],
-            "created_at": r[3]
-        }
-        for r in rows
-    ])
-
-@app.route("/saddam-api/reset", methods=["POST"])
-def reset_db():
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM students")
-    conn.commit()
-    conn.close()
-    return jsonify({"status": "database cleared"})
-
-# =====================
 # TELEGRAM BOT SETUP
 # =====================
 
@@ -134,8 +99,46 @@ bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CommandHandler("clear", clear))
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+# 🔥 MUHIM — BOT INITIALIZE
+asyncio.run(bot_app.initialize())
+
 # =====================
-# WEBHOOK ROUTE (SYNC!)
+# API ROUTES
+# =====================
+
+@app.route("/")
+def home():
+    return "SADDAM API IS RUNNING 🚀"
+
+@app.route("/saddam-api/students", methods=["GET"])
+def get_students():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT region, age, salary, created_at FROM students")
+    rows = cursor.fetchall()
+    conn.close()
+
+    return jsonify([
+        {
+            "region": r[0],
+            "age": r[1],
+            "salary": r[2],
+            "created_at": r[3]
+        }
+        for r in rows
+    ])
+
+@app.route("/saddam-api/reset", methods=["POST"])
+def reset_db():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM students")
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "database cleared"})
+
+# =====================
+# WEBHOOK ROUTE
 # =====================
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
@@ -151,6 +154,5 @@ def telegram_webhook():
 
 @app.route("/setwebhook")
 def set_webhook():
-    asyncio.run(bot_app.initialize())
     asyncio.run(bot_app.bot.set_webhook(f"{BASE_URL}/{BOT_TOKEN}"))
     return "Webhook set successfully ✅"
